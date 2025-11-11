@@ -30,7 +30,7 @@ class Preferences:
         "video_selection": "Test Pattern",
         "audio_selection": "🎤 Meeting Voice",
         "vm_mode": Config.detect_vm(),
-        "window_geometry": "500x650",
+        "window_geometry": "550x850",
         "last_video_dir": str(Config.VIDEO_DIR),
         "last_audio_dir": str(Config.AUDIO_DIR),
     }
