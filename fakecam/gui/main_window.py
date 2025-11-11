@@ -160,7 +160,7 @@ class FakeCamGUI:
 
         # Load preferences
         self.preferences = Preferences()
-        geometry = self.preferences.get("window_geometry", "550x750")
+        geometry = self.preferences.get("window_geometry", "550x850")
         self.root.geometry(geometry)
 
         # Initialize managers
@@ -443,7 +443,7 @@ class FakeCamGUI:
 
         self.log_text = scrolledtext.ScrolledText(
             log_frame,
-            height=10,
+            height=18,
             wrap=tk.WORD,
             font=("Courier", 9)
         )
