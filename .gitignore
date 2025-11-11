@@ -1,0 +1,65 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+.env
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Project specific
+archive_old_versions/
+audio/
+videos/
+*.wav
+*.mp4
+*.mkv
+*.avi
+*.temp.wav
+fakecam_videos/
+fakecam_audio/
+
+# Log files
+*.log
+
+# Temporary files
+*.tmp
+*.bak
+*.old
+
+# Claude specific
+.claude/
+
+# Compiled files
+*.pyc
+
+# Desktop files
+*.desktop
