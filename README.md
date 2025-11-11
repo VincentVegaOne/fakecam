@@ -317,16 +317,6 @@ Created for easy testing of video conferencing applications.
 - PulseAudio (virtual microphone)
 - Multiple TTS engines (Flite, Pico, eSpeak, Festival)
 
-## 🌟 Why v2.0?
-
-The original FakeCam was a quick proof-of-concept. V2.0 is a **production-ready application** suitable for:
-- **Corporate environments** - Professional code quality
-- **Educational purposes** - Clean architecture examples
-- **Open source contributions** - Well-documented codebase
-- **AI/Vibe Coding showcase** - Demonstrates AI-assisted development quality
-
-**This project showcases what's possible with AI-assisted development when focusing on quality, security, and maintainability.**
-
 ---
 
 **Enjoy your virtual camera! 🎥🎤**
