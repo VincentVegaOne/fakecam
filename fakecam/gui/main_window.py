@@ -181,12 +181,15 @@ class FakeCamGUI:
         self._setup_logging()
 
         # Welcome message
-        self.log("Welcome to FakeCam v{Config.APP_VERSION}!")
-        self.log("Click 'SETUP DEVICES' to begin")
+        self.log(f"Welcome to FakeCam v{Config.APP_VERSION}!")
+        self.log("Setting up devices...")
 
         # Check if running in VM
         if Config.detect_vm():
             self.log("⚙ VM detected - VM optimization recommended")
+
+        # Auto-setup devices on startup
+        self.root.after(500, self._auto_setup_devices)
 
     def _build_ui(self):
         """Build the user interface."""
@@ -528,8 +531,35 @@ class FakeCamGUI:
         mode = "enabled" if self.vm_var.get() else "disabled"
         self.log(f"VM optimization {mode}")
 
-    def _setup_devices_thread(self):
-        """Setup devices in background thread."""
+    def _update_start_both_button(self):
+        """Update START BOTH button based on current state."""
+        video_running = self.video_manager.is_running
+        audio_running = self.audio_manager.is_running
+
+        if video_running and audio_running:
+            # Both running
+            self.start_both_btn.config(
+                text="⏹ STOP BOTH",
+                bg="#dc3545",
+                command=self._stop_both
+            )
+        elif video_running or audio_running:
+            # One running
+            self.start_both_btn.config(
+                text="⏹ STOP ALL",
+                bg="#dc3545",
+                command=self._stop_both
+            )
+        else:
+            # Both stopped
+            self.start_both_btn.config(
+                text="🚀 START BOTH",
+                bg="#007bff",
+                command=self._start_both
+            )
+
+    def _auto_setup_devices(self):
+        """Auto-setup devices on startup."""
         def task():
             self.root.after(0, lambda: self.setup_btn.config(state="disabled", text="⏳ Setting up..."))
 
@@ -542,7 +572,48 @@ class FakeCamGUI:
                         self.log("✓ All devices setup successfully!"),
                         self.log(f"  Video device: {Config.VIDEO_DEVICE}"),
                         self.log(f"  Audio sink: Monitor of {Config.AUDIO_SINK_DESCRIPTION}"),
-                        self.setup_btn.config(bg="#28a745", text="✓ DEVICES READY"),
+                        self.log("Ready to start! Select sources and click START BOTH"),
+                        self.setup_btn.config(bg="#28a745", text="✓ DEVICES READY", state="disabled"),
+                        self.set_status("Ready - Devices configured")
+                    ])
+                else:
+                    error_msg = []
+                    if not video_ok:
+                        error_msg.append("video")
+                    if not audio_ok:
+                        error_msg.append("audio")
+
+                    self.root.after(0, lambda: [
+                        self.log(f"✗ Setup errors: {', '.join(error_msg)} failed"),
+                        self.log("  You can retry setup or continue with available devices"),
+                        self.setup_btn.config(state="normal", text="⚙ RETRY SETUP", bg="#ffc107")
+                    ])
+
+            except Exception as e:
+                self.root.after(0, lambda: [
+                    self.log(f"✗ Setup error: {e}"),
+                    self.log("  Click RETRY SETUP to try again"),
+                    self.setup_btn.config(state="normal", text="⚙ RETRY SETUP", bg="#ffc107")
+                ])
+
+        thread = threading.Thread(target=task, daemon=True)
+        thread.start()
+
+    def _setup_devices_thread(self):
+        """Setup devices in background thread (manual retry)."""
+        def task():
+            self.root.after(0, lambda: self.setup_btn.config(state="disabled", text="⏳ Setting up..."))
+
+            try:
+                video_ok, audio_ok = self.device_manager.setup_all()
+
+                if video_ok and audio_ok:
+                    self.devices_setup = True
+                    self.root.after(0, lambda: [
+                        self.log("✓ All devices setup successfully!"),
+                        self.log(f"  Video device: {Config.VIDEO_DEVICE}"),
+                        self.log(f"  Audio sink: Monitor of {Config.AUDIO_SINK_DESCRIPTION}"),
+                        self.setup_btn.config(bg="#28a745", text="✓ DEVICES READY", state="disabled"),
                         self.set_status("Devices ready")
                     ])
                 else:
@@ -556,14 +627,14 @@ class FakeCamGUI:
                         self.log(f"✗ Setup errors: {', '.join(error_msg)}"),
                         self.log("  Check logs above for details"),
                         messagebox.showerror("Setup Error", f"Setup failed: {', '.join(error_msg)}"),
-                        self.setup_btn.config(state="normal", text="⚙ SETUP DEVICES (Try Again)")
+                        self.setup_btn.config(state="normal", text="⚙ RETRY SETUP", bg="#ffc107")
                     ])
 
             except Exception as e:
                 self.root.after(0, lambda: [
                     self.log(f"✗ Setup error: {e}"),
                     messagebox.showerror("Setup Error", str(e)),
-                    self.setup_btn.config(state="normal", text="⚙ SETUP DEVICES (Try Again)")
+                    self.setup_btn.config(state="normal", text="⚙ RETRY SETUP", bg="#ffc107")
                 ])
 
         thread = threading.Thread(target=task, daemon=True)
@@ -600,10 +671,14 @@ class FakeCamGUI:
             self.log("✓ Video started")
             self.set_status(f"Video: {source}")
 
+            # Update START BOTH button
+            self._update_start_both_button()
+
         except VideoManagerError as e:
             self.log(f"✗ Video error: {e}")
             messagebox.showerror("Video Error", str(e))
             self.video_btn.config(state="normal")
+            self._update_start_both_button()
 
     def _stop_video(self):
         """Stop video streaming."""
@@ -623,9 +698,13 @@ class FakeCamGUI:
             self.log("✓ Video stopped")
             self.set_status("Video stopped")
 
+            # Update START BOTH button
+            self._update_start_both_button()
+
         except Exception as e:
             self.log(f"✗ Error stopping video: {e}")
             self.video_btn.config(state="normal")
+            self._update_start_both_button()
 
     def _download_video_thread(self):
         """Download video in background thread."""
@@ -703,10 +782,14 @@ class FakeCamGUI:
             self.log("✓ Audio started")
             self.set_status(f"Audio: {source}")
 
+            # Update START BOTH button
+            self._update_start_both_button()
+
         except AudioManagerError as e:
             self.log(f"✗ Audio error: {e}")
             messagebox.showerror("Audio Error", str(e))
             self.audio_btn.config(state="normal")
+            self._update_start_both_button()
 
     def _stop_audio(self):
         """Stop audio streaming."""
@@ -726,9 +809,13 @@ class FakeCamGUI:
             self.log("✓ Audio stopped")
             self.set_status("Audio stopped")
 
+            # Update START BOTH button
+            self._update_start_both_button()
+
         except Exception as e:
             self.log(f"✗ Error stopping audio: {e}")
             self.audio_btn.config(state="normal")
+            self._update_start_both_button()
 
     def _generate_audio_thread(self):
         """Generate audio in background thread."""
@@ -786,6 +873,20 @@ class FakeCamGUI:
 
         if not self.audio_manager.is_running:
             self._start_audio()
+
+        # Update button state
+        self._update_start_both_button()
+
+    def _stop_both(self):
+        """Stop both video and audio."""
+        if self.video_manager.is_running:
+            self._stop_video()
+
+        if self.audio_manager.is_running:
+            self._stop_audio()
+
+        # Update button state
+        self._update_start_both_button()
 
     def cleanup(self):
         """Cleanup on exit."""
