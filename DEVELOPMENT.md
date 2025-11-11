@@ -447,13 +447,3 @@ When contributing code:
 ## License
 
 MIT License - See LICENSE file for details.
-
-## Contact
-
-For questions or support:
-- GitHub Issues: https://github.com/yourusername/fakecam/issues
-- Email: your.email@example.com
-
----
-
-**This documentation showcases professional software engineering practices suitable for production environments.**
