@@ -23,6 +23,7 @@ except ImportError:
 from ..core.device_setup import DeviceManager, DeviceSetupError
 from ..core.video_manager import VideoManager, VideoManagerError
 from ..core.audio_manager import AudioManager, AudioManagerError
+from ..core.monitor import SystemMonitor
 from ..utils.config import Config
 from ..utils.preferences import Preferences
 from ..utils.process_manager import get_registry
@@ -167,9 +168,12 @@ class FakeCamGUI:
         self.device_manager = DeviceManager()
         self.video_manager = VideoManager()
         self.audio_manager = AudioManager()
+        self.system_monitor = SystemMonitor()
 
         # State
         self.devices_setup = False
+        self.monitoring_active = False
+        self.monitor_update_interval = 1000  # ms
 
         # Build UI
         self._build_ui()
@@ -203,20 +207,40 @@ class FakeCamGUI:
         # Setup button
         self._build_setup_section(main)
 
-        # Video section
-        self._build_video_section(main)
+        # Create notebook (tabs)
+        self.notebook = ttk.Notebook(main)
+        self.notebook.pack(fill=tk.BOTH, expand=True, pady=10)
 
-        # Audio section
-        self._build_audio_section(main)
+        # Tab 1: Controls
+        controls_frame = tk.Frame(self.notebook)
+        self.notebook.add(controls_frame, text="Controls")
 
-        # Quick actions
-        self._build_quick_actions(main)
+        # Tab 2: Monitor
+        monitor_frame = tk.Frame(self.notebook)
+        self.notebook.add(monitor_frame, text="Monitor")
 
-        # Log area
+        # Build controls tab content
+        self._build_controls_tab(controls_frame)
+
+        # Build monitor tab content
+        self._build_monitor_tab(monitor_frame)
+
+        # Log area (shared, below tabs)
         self._build_log_section(main)
 
         # Status bar
         self._build_status_bar()
+
+    def _build_controls_tab(self, parent):
+        """Build the controls tab content."""
+        # Video section
+        self._build_video_section(parent)
+
+        # Audio section
+        self._build_audio_section(parent)
+
+        # Quick actions
+        self._build_quick_actions(parent)
 
     def _build_header(self, parent):
         """Build header section."""
@@ -462,6 +486,383 @@ class FakeCamGUI:
             font=("Arial", 8)
         )
         self.status_bar.pack(side=tk.BOTTOM, fill=tk.X)
+
+    def _build_monitor_tab(self, parent):
+        """Build the monitor tab content."""
+        # Main container
+        monitor_container = tk.Frame(parent, padx=10, pady=10)
+        monitor_container.pack(fill=tk.BOTH, expand=True)
+
+        # Monitor control
+        control_frame = tk.Frame(monitor_container)
+        control_frame.pack(fill=tk.X, pady=(0, 10))
+
+        self.monitor_toggle_btn = tk.Button(
+            control_frame,
+            text="▶ START MONITORING",
+            command=self._toggle_monitoring,
+            bg="#28a745",
+            fg="white",
+            font=("Arial", 10, "bold")
+        )
+        self.monitor_toggle_btn.pack(side=tk.LEFT, padx=5)
+
+        tk.Label(
+            control_frame,
+            text="Updates every 1 second",
+            font=("Arial", 9),
+            fg="gray"
+        ).pack(side=tk.LEFT, padx=10)
+
+        # Create two columns
+        left_column = tk.Frame(monitor_container)
+        left_column.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 5))
+
+        right_column = tk.Frame(monitor_container)
+        right_column.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(5, 0))
+
+        # === LEFT COLUMN: Video Stats ===
+        video_frame = tk.LabelFrame(
+            left_column,
+            text="📹 VIDEO OUTPUT",
+            font=("Arial", 11, "bold"),
+            padx=10,
+            pady=10
+        )
+        video_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
+
+        # Video stats labels
+        self.monitor_video_resolution = self._create_stat_label(video_frame, "Resolution:")
+        self.monitor_video_framerate = self._create_stat_label(video_frame, "Framerate:")
+        self.monitor_video_format = self._create_stat_label(video_frame, "Format:")
+        self.monitor_video_status = self._create_stat_label(video_frame, "Status:")
+
+        # === LEFT COLUMN: Stream Stats ===
+        stream_frame = tk.LabelFrame(
+            left_column,
+            text="📊 STREAM STATS",
+            font=("Arial", 11, "bold"),
+            padx=10,
+            pady=10
+        )
+        stream_frame.pack(fill=tk.BOTH, expand=True)
+
+        self.monitor_video_bitrate = self._create_stat_label(stream_frame, "Video Bitrate:")
+        self.monitor_audio_bitrate = self._create_stat_label(stream_frame, "Audio Bitrate:")
+        self.monitor_video_uptime = self._create_stat_label(stream_frame, "Video Uptime:")
+        self.monitor_audio_uptime = self._create_stat_label(stream_frame, "Audio Uptime:")
+
+        # === RIGHT COLUMN: Audio Stats ===
+        audio_frame = tk.LabelFrame(
+            right_column,
+            text="🎤 AUDIO OUTPUT",
+            font=("Arial", 11, "bold"),
+            padx=10,
+            pady=10
+        )
+        audio_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
+
+        # Audio stats labels
+        self.monitor_audio_rate = self._create_stat_label(audio_frame, "Sample Rate:")
+        self.monitor_audio_channels = self._create_stat_label(audio_frame, "Channels:")
+        self.monitor_audio_format = self._create_stat_label(audio_frame, "Format:")
+        self.monitor_audio_status = self._create_stat_label(audio_frame, "Status:")
+
+        # Audio level meter
+        tk.Label(
+            audio_frame,
+            text="Audio Level:",
+            font=("Arial", 10, "bold")
+        ).pack(anchor=tk.W, pady=(10, 5))
+
+        # Create audio level meter canvas
+        meter_frame = tk.Frame(audio_frame)
+        meter_frame.pack(fill=tk.X, pady=5)
+
+        self.audio_meter_canvas = tk.Canvas(
+            meter_frame,
+            height=30,
+            bg="black",
+            highlightthickness=1,
+            highlightbackground="gray"
+        )
+        self.audio_meter_canvas.pack(fill=tk.X)
+
+        # Level percentage label
+        self.monitor_audio_level_label = tk.Label(
+            audio_frame,
+            text="0%",
+            font=("Arial", 9),
+            fg="gray"
+        )
+        self.monitor_audio_level_label.pack(anchor=tk.E)
+
+        # === RIGHT COLUMN: System Info ===
+        system_frame = tk.LabelFrame(
+            right_column,
+            text="💻 SYSTEM",
+            font=("Arial", 11, "bold"),
+            padx=10,
+            pady=10
+        )
+        system_frame.pack(fill=tk.BOTH, expand=True)
+
+        self.monitor_device_status = self._create_stat_label(
+            system_frame,
+            "Device Status:"
+        )
+        self.monitor_vm_mode = self._create_stat_label(
+            system_frame,
+            "VM Optimization:"
+        )
+
+        # Refresh button
+        tk.Button(
+            system_frame,
+            text="🔄 Refresh Now",
+            command=self._update_monitor_display,
+            font=("Arial", 9)
+        ).pack(pady=(10, 0))
+
+    def _create_stat_label(self, parent, label_text):
+        """
+        Create a statistics label pair.
+
+        Args:
+            parent: Parent widget
+            label_text: Label text
+
+        Returns:
+            Value label widget
+        """
+        row = tk.Frame(parent)
+        row.pack(fill=tk.X, pady=2)
+
+        tk.Label(
+            row,
+            text=label_text,
+            font=("Arial", 9, "bold"),
+            width=15,
+            anchor=tk.W
+        ).pack(side=tk.LEFT)
+
+        value_label = tk.Label(
+            row,
+            text="--",
+            font=("Arial", 9),
+            fg="gray",
+            anchor=tk.W
+        )
+        value_label.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        return value_label
+
+    def _toggle_monitoring(self):
+        """Toggle monitoring on/off."""
+        if self.monitoring_active:
+            self._stop_monitoring()
+        else:
+            self._start_monitoring()
+
+    def _start_monitoring(self):
+        """Start real-time monitoring."""
+        self.monitoring_active = True
+        self.system_monitor.start_monitoring()
+
+        self.monitor_toggle_btn.config(
+            text="⏹ STOP MONITORING",
+            bg="#dc3545"
+        )
+
+        self.log("Monitoring started")
+        self._schedule_monitor_update()
+
+    def _stop_monitoring(self):
+        """Stop real-time monitoring."""
+        self.monitoring_active = False
+
+        self.monitor_toggle_btn.config(
+            text="▶ START MONITORING",
+            bg="#28a745"
+        )
+
+        self.log("Monitoring stopped")
+
+    def _schedule_monitor_update(self):
+        """Schedule next monitor update."""
+        if self.monitoring_active:
+            self._update_monitor_display()
+            self.root.after(self.monitor_update_interval, self._schedule_monitor_update)
+
+    def _update_monitor_display(self):
+        """Update monitor display with current stats."""
+        try:
+            stats = self.system_monitor.get_all_stats()
+            video_stats = stats["video"]
+            audio_stats = stats["audio"]
+            stream_stats = stats["stream"]
+
+            # Update video stats
+            self.monitor_video_resolution.config(
+                text=video_stats.resolution,
+                fg="green" if video_stats.is_streaming else "gray"
+            )
+            self.monitor_video_framerate.config(
+                text=f"{video_stats.framerate:.1f} fps",
+                fg="green" if video_stats.framerate > 0 else "gray"
+            )
+            self.monitor_video_format.config(
+                text=video_stats.pixel_format,
+                fg="green" if video_stats.is_streaming else "gray"
+            )
+            self.monitor_video_status.config(
+                text="● Streaming" if video_stats.is_streaming else "○ Idle",
+                fg="green" if video_stats.is_streaming else "gray"
+            )
+
+            # Update audio stats
+            sample_rate_text = f"{audio_stats.sample_rate} Hz" if audio_stats.sample_rate > 0 else "--"
+            self.monitor_audio_rate.config(
+                text=sample_rate_text,
+                fg="green" if audio_stats.sink_exists else "gray"
+            )
+            self.monitor_audio_channels.config(
+                text=audio_stats.channels,
+                fg="green" if audio_stats.sink_exists else "gray"
+            )
+            self.monitor_audio_format.config(
+                text=audio_stats.format,
+                fg="green" if audio_stats.sink_exists else "gray"
+            )
+            self.monitor_audio_status.config(
+                text="● Streaming" if audio_stats.is_streaming else "○ Idle",
+                fg="green" if audio_stats.is_streaming else "gray"
+            )
+
+            # Update audio level meter
+            self._draw_audio_meter(audio_stats.level)
+            self.monitor_audio_level_label.config(
+                text=f"{int(audio_stats.level * 100)}%",
+                fg="green" if audio_stats.level > 0.1 else "gray"
+            )
+
+            # Update stream stats
+            self.monitor_video_bitrate.config(
+                text=f"{stream_stats.estimated_video_bitrate:.2f} Mbps" if stream_stats.estimated_video_bitrate > 0 else "--",
+                fg="green" if stream_stats.estimated_video_bitrate > 0 else "gray"
+            )
+            self.monitor_audio_bitrate.config(
+                text=f"{stream_stats.estimated_audio_bitrate:.1f} Kbps" if stream_stats.estimated_audio_bitrate > 0 else "--",
+                fg="green" if stream_stats.estimated_audio_bitrate > 0 else "gray"
+            )
+
+            # Format uptime
+            video_uptime = self._format_uptime(stream_stats.video_uptime)
+            audio_uptime = self._format_uptime(stream_stats.audio_uptime)
+
+            self.monitor_video_uptime.config(
+                text=video_uptime,
+                fg="green" if video_stats.is_streaming else "gray"
+            )
+            self.monitor_audio_uptime.config(
+                text=audio_uptime,
+                fg="green" if audio_stats.is_streaming else "gray"
+            )
+
+            # Update system info
+            device_ok = video_stats.device_exists and audio_stats.sink_exists
+            self.monitor_device_status.config(
+                text="✓ Ready" if device_ok else "✗ Not Ready",
+                fg="green" if device_ok else "red"
+            )
+            self.monitor_vm_mode.config(
+                text="Enabled" if self.vm_var.get() else "Disabled",
+                fg="blue" if self.vm_var.get() else "gray"
+            )
+
+        except Exception as e:
+            logger.error(f"Error updating monitor display: {e}")
+
+    def _draw_audio_meter(self, level: float):
+        """
+        Draw audio level meter.
+
+        Args:
+            level: Audio level from 0.0 to 1.0
+        """
+        try:
+            canvas = self.audio_meter_canvas
+            width = canvas.winfo_width()
+            height = canvas.winfo_height()
+
+            if width < 10:  # Not yet rendered
+                width = 400
+                height = 30
+
+            # Clear canvas
+            canvas.delete("all")
+
+            # Draw background grid
+            for i in range(0, 11):
+                x = (i / 10) * width
+                canvas.create_line(
+                    x, 0, x, height,
+                    fill="#333",
+                    width=1
+                )
+
+            # Calculate meter width
+            meter_width = int(level * width)
+
+            # Determine color based on level
+            if level < 0.5:
+                color = "#00ff00"  # Green
+            elif level < 0.8:
+                color = "#ffff00"  # Yellow
+            else:
+                color = "#ff0000"  # Red
+
+            # Draw meter
+            if meter_width > 0:
+                canvas.create_rectangle(
+                    0, 0, meter_width, height,
+                    fill=color,
+                    outline=""
+                )
+
+            # Draw peak indicator
+            if meter_width > 0:
+                canvas.create_line(
+                    meter_width, 0, meter_width, height,
+                    fill="white",
+                    width=2
+                )
+
+        except Exception as e:
+            logger.debug(f"Error drawing audio meter: {e}")
+
+    def _format_uptime(self, uptime) -> str:
+        """
+        Format uptime timedelta as string.
+
+        Args:
+            uptime: timedelta object
+
+        Returns:
+            Formatted uptime string
+        """
+        if uptime.total_seconds() == 0:
+            return "--"
+
+        total_seconds = int(uptime.total_seconds())
+        hours = total_seconds // 3600
+        minutes = (total_seconds % 3600) // 60
+        seconds = total_seconds % 60
+
+        if hours > 0:
+            return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+        else:
+            return f"{minutes:02d}:{seconds:02d}"
 
     def _setup_logging(self):
         """Set up logging to GUI."""
@@ -891,6 +1292,10 @@ class FakeCamGUI:
     def cleanup(self):
         """Cleanup on exit."""
         self.log("Cleaning up...")
+
+        # Stop monitoring
+        if self.monitoring_active:
+            self._stop_monitoring()
 
         # Save preferences
         self._save_preferences()
