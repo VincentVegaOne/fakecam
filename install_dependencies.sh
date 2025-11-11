@@ -84,7 +84,7 @@ if [ -z "$ALL_MISSING" ]; then
     fi
 
     echo -e "\n${GREEN}You're ready to run FakeCam!${NC}"
-    echo -e "${CYAN}Run: python3 fakecam_gui_v2.py${NC}\n"
+    echo -e "${CYAN}Run: python3 fakecam.py${NC}\n"
     exit 0
 fi
 
@@ -179,7 +179,7 @@ if [ $? -eq 0 ]; then
     echo -e "${GREEN}║           Installation Complete!                   ║${NC}"
     echo -e "${GREEN}╚════════════════════════════════════════════════════╝${NC}"
     echo -e "\n${CYAN}You can now run FakeCam:${NC}"
-    echo -e "  ${GREEN}python3 fakecam_gui_v2.py${NC}\n"
+    echo -e "  ${GREEN}python3 fakecam.py${NC}\n"
     echo -e "${YELLOW}No more password prompts needed!${NC}\n"
 
 else

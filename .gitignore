@@ -61,5 +61,5 @@ fakecam_audio/
 # Compiled files
 *.pyc
 
-# Desktop files
-*.desktop
+# User preferences
+.fakecam_prefs.json

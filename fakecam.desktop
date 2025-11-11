@@ -1,0 +1,12 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=FakeCam
+GenericName=Virtual Camera and Microphone
+Comment=Virtual camera and microphone for testing video conferencing applications
+Exec=python3 /home/user/fakecam/fakecam.py
+Icon=camera-video
+Terminal=false
+Categories=AudioVideo;Audio;Video;
+Keywords=camera;microphone;virtual;testing;video;audio;conference;
+StartupNotify=true
